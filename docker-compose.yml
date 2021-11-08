@@ -1,0 +1,66 @@
+version: "3.4"
+services:
+  qiita_db:
+    build: ./mysql/
+    container_name: qiita_db
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - qiita_db_data:/var/log/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping --host=127.0.0.1 --user=${MYSQL_USER} --password=${MYSQL_PASSWORD} --port=3306"]
+    ports:
+      - "3306:3306"
+  qiita_rails:
+    build: ./api/server/
+    container_name: qiita_rails
+    command: ["./run.sh"]
+    env_file:
+      - ./api/server/.env
+    volumes:
+      - ./api/server/:/code/
+      - qiita_public:/code/public/
+    environment:
+      TZ: Asia/Tokyo
+      RAILS_ENV: development
+    depends_on:
+      qiita_db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000 || exit 1"]
+  qiita_api_nginx:
+    build: ./api/nginx/
+    container_name: qiita_api_nginx
+    volumes:
+      - qiita_public:/code/public/
+    ports:
+      - "8080:80"
+    depends_on:
+      qiita_rails:
+        condition: service_healthy
+  qiita_react:
+    build: ./frontend/
+    container_name: qiita_react
+    volumes:
+      - ./frontend/front/:/code/
+    ports:
+      - "8000:8000"
+    command: ["/run.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000 || exit 1"]
+  qiita_front_nginx:
+    build: ./frontend/nginx/
+    container_name: qiita_front_nginx
+    ports:
+      - "80:80"
+    depends_on:
+      qiita_react:
+        condition: service_healthy
+volumes:
+  qiita_db_data:
+  qiita_public:
